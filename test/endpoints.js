@@ -17,8 +17,8 @@ const testGet = (url, assertionsCallback = () => null) => {
   })
 }
 
-const testPost = (url, data, assertionsCallback = () => null) => {
-  test.cb(`post ${url}`, function (t) {
+const testPost = (url, data, assertionsCallback = () => null, name = null) => {
+  test.cb(name || `post ${url}`, function (t) {
     const serverStream = servertest(t.context.server, url, { method: 'POST' })
     const stream = new ReadableStream()
     stream.push(JSON.stringify(data))
@@ -27,7 +27,7 @@ const testPost = (url, data, assertionsCallback = () => null) => {
 
     serverStream.pipe(bl(function (err, data) {
       t.falsy(err, 'no error')
-      assertionsCallback(t, data)
+      assertionsCallback(t, data.toString())
     }))
   })
 }
@@ -63,14 +63,17 @@ test.beforeEach.cb((t) => {
   }
 
   t.context.targets = [target1, target2]
-  redis.mset([
-    'target:1',
-    JSON.stringify(t.context.targets[0]),
-    'target:2',
-    JSON.stringify(t.context.targets[1])
-  ], (err, ok) => {
+  redis.flushdb(function (err, ok) {
     t.falsy(err, 'no error')
-    t.end()
+    redis.mset([
+      'target:1',
+      JSON.stringify(t.context.targets[0]),
+      'target:2',
+      JSON.stringify(t.context.targets[1])
+    ], (err1, ok) => {
+      t.falsy(err1, 'no error')
+      t.end()
+    })
   })
 })
 
@@ -121,17 +124,33 @@ testPost('/api/targets', {
     t.end()
   })
 })
-// test.cb('post /api/targets', function (t) {
-//   const serverStream = servertest(t.context.server, '/api/targets', { method: 'POST' })
-//   const stream = new ReadableStream()
-//   const target3 =
-//     stream.push(JSON.stringify(target3))
-//   stream.push(null)
 
-//   stream.pipe(serverStream)
+testPost('/api/targets/1', {
+  id: 1,
+  url: 'http://target11.com',
+  value: '11',
+  maxAcceptsPerDay: '11',
+  accept: {
+    geoState: {
+      $in: ['et', 'ch']
+    },
+    hour: {
+      $in: ['8', '9', '10']
+    }
+  }
+}, function (t, data) {
+  redis.get('target:1', (err, result) => {
+    t.falsy(err, 'no error')
+    t.is(JSON.parse(result).value, '11')
+    t.end()
+  })
+})
 
-//   serverStream.pipe(bl(function (err, data) {
-//     t.falsy(err, 'no error')
-
-//   }))
-// })
+testPost('/route', {
+  "geoState": "et",
+  "publisher": "abc",
+  "timestamp": "2018-07-19T08:28:59"
+}, function (t, data) {
+  t.is(JSON.parse(data).url, 'http://target11.com')
+  t.end()
+}, 'test a route gets proper response on success')
