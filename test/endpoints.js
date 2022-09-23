@@ -4,6 +4,17 @@ var test = require('ava')
 var servertest = require('servertest')
 const createServer = require('../lib/server')
 const redis = require('../lib/redis')
+const fs = require('fs')
+const ReadableStream = require('stream').Readable
+const bl = require('bl')
+
+const testGet = (t, url, assertionsCallback = () => null) => {
+  servertest(t.context.server, url, { encoding: 'utf8' }, function (err, res) {
+    t.falsy(err, 'no error')
+    assertionsCallback(t)
+    t.end()
+  })
+}
 
 test.beforeEach.cb((t) => {
   t.context.server = createServer()
@@ -82,4 +93,36 @@ test.cb('get /api/target/1', function (t) {
     t.like(JSON.parse(res.body), t.context.targets[0])
     t.end()
   })
+})
+
+test.cb('post /api/targets', function (t) {
+  const serverStream = servertest(t.context.server, '/api/targets', { method: 'POST' })
+  const stream = new ReadableStream()
+  const target3 = {
+    id: 3,
+    url: 'http://target3.com',
+    value: '2',
+    maxAcceptsPerDay: '3',
+    accept: {
+      geoState: {
+        $in: ['et', 'ch']
+      },
+      hour: {
+        $in: ['8', '9', '10']
+      }
+    }
+  }
+  stream.push(JSON.stringify(target3))
+  stream.push(null)
+
+  stream.pipe(serverStream)
+
+  serverStream.pipe(bl(function (err, data) {
+    t.falsy(err, 'no error')
+    redis.keys('target:*', function (err, keys) {
+      t.falsy(err, 'no error')
+      t.is(keys.length, 3)
+      t.end()
+    })
+  }))
 })
