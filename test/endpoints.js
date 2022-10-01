@@ -147,9 +147,9 @@ testPost('/api/targets/1', {
 })
 
 testPost('/route', {
-  "geoState": "et",
-  "publisher": "abc",
-  "timestamp": "2018-07-19T08:28:59"
+  geoState: 'et',
+  publisher: 'abc',
+  timestamp: '2018-07-19T08:28:59'
 }, function (t, data) {
   t.is(JSON.parse(data).url, 'http://target11.com')
   t.end()
